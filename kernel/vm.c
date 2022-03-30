@@ -438,9 +438,78 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 /* NTU OS 2022 */
 /* Print multi layer page table. */
+void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
+  pte_t pte;
+  uint64 pa;
+  uint64 new_index;
+  uint64 va;
+  uint64 last_valid_pte = -1;
+
+  if (level == 3){
+    return;
+  }
+  for(int i=511; i>=0; i--){
+    pte = pagetable[i];
+    if(pte & PTE_V){
+      last_valid_pte = pte;
+      break;
+    }
+  }
+  for(int i=0; i<512; i++){
+    pte = pagetable[i];
+    if(pte & PTE_V) {
+      pa = PTE2PA(pte);
+      new_index = index + (i << 9*(2-level));
+      va = new_index << PGSHIFT;
+      if(pte == last_valid_pte){
+        bar[level] = 0;
+      }
+      else{
+        bar[level] = 1;
+      }
+      for(int i=0; i<level; i++){
+        if(bar[i] == 1){
+          printf("│   ");
+        }
+        printf("    ");
+      }
+      if(pte == last_valid_pte){
+        printf("└");
+      }
+      else{
+        printf("├");
+      }
+      printf("── %d: pte=%p va=%p pa=%p", i, pte, va, pa);
+      if(pte & PTE_V){
+        printf(" V");
+      }
+      if(pte & PTE_R){
+        printf(" R");
+      }
+      if(pte & PTE_W){
+        printf(" W");
+      }
+      if(pte & PTE_X){
+        printf(" X");
+      }
+      if(pte & PTE_U){
+        printf(" U");
+      }
+      if(pte & PTE_S){
+        printf(" S");
+      }
+      printf("\n");
+      vmprint_recursive((pagetable_t)pa, new_index, level+1, bar);
+    }
+  }
+}
+
 void vmprint(pagetable_t pagetable) {
   /* TODO */
-  panic("not implemented yet\n");
+  int bar[3] = {0};
+  printf("page table %p\n", pagetable);
+  vmprint_recursive(pagetable, 0, 0, bar);
+  // panic("not implemented yet\n");
 }
 
 /* NTU OS 2022 */
