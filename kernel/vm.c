@@ -440,7 +440,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 /* NTU OS 2022 */
 /* Print multi layer page table. */
 void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
-  pte_t pte;
+  pte_t *pte;
   uint64 pa;
   uint64 new_index;
   uint64 va;
@@ -451,19 +451,19 @@ void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
     return;
   }
   for(int i=511; i>=0; i--){
-    pte = pagetable[i];
-    if(pte & PTE_V){
-      last_valid_pte = pte;
+    pte = pagetable + i;
+    if(*pte & PTE_V || *pte & PTE_S){
+      last_valid_pte = *pte;
       break;
     }
   }
   for(int i=0; i<512; i++){
-    pte = pagetable[i];
-    if(pte & PTE_V || (!(pte & PTE_V) && (pte & PTE_S))) {
-      pa = PTE2PA(pte);
+    pte = pagetable + i;
+    if(*pte & PTE_V || *pte & PTE_S) {
+      pa = PTE2PA(*pte);
       new_index = index + (i << 9*(2-level));
       va = new_index << PGSHIFT;
-      if(pte == last_valid_pte){
+      if(*pte == last_valid_pte){
         bar[level] = 0;
       }
       else{
@@ -477,39 +477,41 @@ void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
           printf("    ");
         }
       }
-      if(pte == last_valid_pte){
+      if(*pte == last_valid_pte){
         printf("└");
       }
       else{
         printf("├");
       }
-      if(!(pte & PTE_V) && (pte & PTE_S)){
-        blockno = PTE2BLOCKNO(pte);
+      if(*pte & PTE_S){
+        blockno = PTE2BLOCKNO(*pte);
         printf("── %d: pte=%p va=%p blockno=%p", i, pte, va, blockno);
       }
-      else if(pte & PTE_V){
+      else if(*pte & PTE_V){
         printf("── %d: pte=%p va=%p pa=%p", i, pte, va, pa);
       }
-      if(pte & PTE_V){
+      if(*pte & PTE_V){
         printf(" V");
       }
-      if(pte & PTE_R){
+      if(*pte & PTE_R){
         printf(" R");
       }
-      if(pte & PTE_W){
+      if(*pte & PTE_W){
         printf(" W");
       }
-      if(pte & PTE_X){
+      if(*pte & PTE_X){
         printf(" X");
       }
-      if(pte & PTE_U){
+      if(*pte & PTE_U){
         printf(" U");
       }
-      if(pte & PTE_S){
+      if(*pte & PTE_S){
         printf(" S");
       }
       printf("\n");
-      vmprint_recursive((pagetable_t)pa, new_index, level+1, bar);
+      if(*pte & PTE_V){
+        vmprint_recursive((pagetable_t)pa, new_index, level+1, bar);
+      }
     }
   }
 }
@@ -526,23 +528,46 @@ void vmprint(pagetable_t pagetable) {
 /* Map pages to physical memory or swap space. */
 int madvise(uint64 base, uint64 len, int advice) {
   /* TODO */
-  // struct proc *p = myproc();
-  // if(len >= p->sz || base < PGROUNDUP(p->trapframe->sp)){
-  //   return -1;
-  // }
-  // uint64 pa = PGROUNDDOWN(base + len);
-  char *pa = kalloc();
-  if(advice == MADV_DONTNEED){
-    begin_op();
-    uint64 blockno = balloc_page(ROOTDEV);
-    write_page_to_disk(ROOTDEV, (char *)pa, blockno);
-    pte_t pte = PA2PTE(pa);
-    end_op();
+  struct proc *p = myproc();
+  uint64 start = PGROUNDDOWN(base);
+  uint64 end = PGROUNDDOWN(base+len-1);
+  // printf("base: %p\n", base);
+  // printf("len: %p\n", len);
+  // printf("start: %p\n", start);
+  // printf("end: %p\n", end);
+  if(advice == MADV_NORMAL){
+    if(base+len-1 >= p->sz){
+    // if(va > p->sz || base < PGROUNDUP(p->trapframe->sp)){
+      // printf("invalid");
+      return -1;
+    }
+  }
+  else if(advice == MADV_DONTNEED){
+    pte_t *pte;
+    uint64 pa;
+    uint64 blockno;
+    for(uint64 va=start; va<=end; va+=PGSIZE){
+      // printf("va: %p\n", va);
+      pte = walk(p->pagetable, va, 0);
+      // printf("pte: %p\n", pte);
+      if(*pte & PTE_V){
+        pa = PTE2PA(*pte);
+        // pa = 0x0000000087f58000;
+        // printf("pa: %p\n", pa);
+        begin_op();
+        blockno = balloc_page(ROOTDEV);
+        // printf("blockno: %p\n", blockno);
+        // printf("pa: %p\n", pa);
+        write_page_to_disk(ROOTDEV, (char *)pa, blockno);
+        end_op();
+        kfree((void *)pa);
+        *pte = BLOCKNO2PTE(blockno) | PTE_FLAGS(*pte);
+        *pte |= PTE_S;
+        *pte &= ~PTE_V;
+      }
+    }
   }
   else if(advice == MADV_WILLNEED){
-
-  }
-  else{
 
   }
   return 0;
