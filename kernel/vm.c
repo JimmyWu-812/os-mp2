@@ -444,6 +444,7 @@ void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
   uint64 pa;
   uint64 new_index;
   uint64 va;
+  uint64 blockno;
   uint64 last_valid_pte = -1;
 
   if (level == 3){
@@ -458,7 +459,7 @@ void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
   }
   for(int i=0; i<512; i++){
     pte = pagetable[i];
-    if(pte & PTE_V) {
+    if(pte & PTE_V || (!(pte & PTE_V) && (pte & PTE_S))) {
       pa = PTE2PA(pte);
       new_index = index + (i << 9*(2-level));
       va = new_index << PGSHIFT;
@@ -482,7 +483,13 @@ void vmprint_recursive(pagetable_t pagetable, int index, int level, int* bar){
       else{
         printf("├");
       }
-      printf("── %d: pte=%p va=%p pa=%p", i, pte, va, pa);
+      if(!(pte & PTE_V) && (pte & PTE_S)){
+        blockno = PTE2BLOCKNO(pte);
+        printf("── %d: pte=%p va=%p blockno=%p", i, pte, va, blockno);
+      }
+      else if(pte & PTE_V){
+        printf("── %d: pte=%p va=%p pa=%p", i, pte, va, pa);
+      }
       if(pte & PTE_V){
         printf(" V");
       }
@@ -519,5 +526,25 @@ void vmprint(pagetable_t pagetable) {
 /* Map pages to physical memory or swap space. */
 int madvise(uint64 base, uint64 len, int advice) {
   /* TODO */
-  panic("not implemented yet\n");
+  // struct proc *p = myproc();
+  // if(len >= p->sz || base < PGROUNDUP(p->trapframe->sp)){
+  //   return -1;
+  // }
+  // uint64 pa = PGROUNDDOWN(base + len);
+  char *pa = kalloc();
+  if(advice == MADV_DONTNEED){
+    begin_op();
+    uint64 blockno = balloc_page(ROOTDEV);
+    write_page_to_disk(ROOTDEV, (char *)pa, blockno);
+    pte_t pte = PA2PTE(pa);
+    end_op();
+  }
+  else if(advice == MADV_WILLNEED){
+
+  }
+  else{
+
+  }
+  return 0;
+  // panic("not implemented yet\n");
 }

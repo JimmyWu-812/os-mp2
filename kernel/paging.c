@@ -16,6 +16,10 @@ int handle_pgfault() {
   struct proc *p = myproc();
   char *pa = kalloc();
 
+  // if(va >= p->sz || va < PGROUNDUP(p->trapframe->sp)){
+  //   return -1;
+  // }
+
   va = PGROUNDDOWN(va);
   if(pa == 0){
     return -1;

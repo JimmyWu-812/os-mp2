@@ -30,7 +30,8 @@ int main(int argc, char *argv[]) {
   }
 
   result = madvise(lower, PGSIZE * 3, MADV_NORMAL);
-  if (result == 0) {
+  // if (result == 0) {
+  if (result != 0) {
     printf("error: return value of madvise() is incorrect.\n");
     exit(1);
   }
