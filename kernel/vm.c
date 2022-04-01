@@ -531,14 +531,9 @@ int madvise(uint64 base, uint64 len, int advice) {
   struct proc *p = myproc();
   uint64 start = PGROUNDDOWN(base);
   uint64 end = PGROUNDDOWN(base+len-1);
-  // printf("base: %p\n", base);
-  // printf("len: %p\n", len);
-  // printf("start: %p\n", start);
-  // printf("end: %p\n", end);
   if(advice == MADV_NORMAL){
     if(base+len-1 >= p->sz){
     // if(va > p->sz || base < PGROUNDUP(p->trapframe->sp)){
-      // printf("invalid");
       return -1;
     }
   }
@@ -547,17 +542,11 @@ int madvise(uint64 base, uint64 len, int advice) {
     uint64 pa;
     uint64 blockno;
     for(uint64 va=start; va<=end; va+=PGSIZE){
-      // printf("va: %p\n", va);
       pte = walk(p->pagetable, va, 0);
-      // printf("pte: %p\n", pte);
       if(*pte & PTE_V){
         pa = PTE2PA(*pte);
-        // pa = 0x0000000087f58000;
-        // printf("pa: %p\n", pa);
         begin_op();
         blockno = balloc_page(ROOTDEV);
-        // printf("blockno: %p\n", blockno);
-        // printf("pa: %p\n", pa);
         write_page_to_disk(ROOTDEV, (char *)pa, blockno);
         end_op();
         kfree((void *)pa);
@@ -568,7 +557,26 @@ int madvise(uint64 base, uint64 len, int advice) {
     }
   }
   else if(advice == MADV_WILLNEED){
-
+    pte_t *pte;
+    uint64 *pa;
+    uint64 blockno;
+    for(uint64 va=start; va<=end; va+=PGSIZE){
+      pte = walk(p->pagetable, va, 0);
+      if(*pte & PTE_S){
+        blockno = PTE2PA(*pte);
+        begin_op();
+        pa = kalloc();
+        read_page_from_disk(ROOTDEV, (char *)pa, blockno);
+        bfree_page(ROOTDEV, blockno);
+        end_op();
+        // *pte = BLOCKNO2PTE(blockno) | PTE_FLAGS(*pte);
+        *pte |= PTE_V;
+        *pte &= ~PTE_S;
+      }
+      else{
+        printf("pte: %p\n", *pte);
+      }
+    }
   }
   return 0;
   // panic("not implemented yet\n");
