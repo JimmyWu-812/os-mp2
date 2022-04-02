@@ -528,16 +528,16 @@ void vmprint(pagetable_t pagetable) {
 /* Map pages to physical memory or swap space. */
 int madvise(uint64 base, uint64 len, int advice) {
   /* TODO */
+  if(len == 0){
+    return 0;
+  }
   struct proc *p = myproc();
   uint64 start = PGROUNDDOWN(base);
   uint64 end = PGROUNDDOWN(base+len-1);
-  if(advice == MADV_NORMAL){
-    if(base+len-1 >= p->sz){
-    // if(va > p->sz || base < PGROUNDUP(p->trapframe->sp)){
-      return -1;
-    }
+  if(base+len-1 >= p->sz){
+    return -1;
   }
-  else if(advice == MADV_DONTNEED){
+  if(advice == MADV_DONTNEED){
     pte_t *pte;
     uint64 pa;
     uint64 blockno;
@@ -559,26 +559,27 @@ int madvise(uint64 base, uint64 len, int advice) {
   else if(advice == MADV_WILLNEED){
     pte_t *pte;
     uint64 blockno;
-    uint64 *pa_dn;
-    char *pa_wn;
+    uint64 *pa1;
+    char *pa2;
     for(uint64 va=start; va<=end; va+=PGSIZE){
       pte = walk(p->pagetable, va, 0);
       if(*pte & PTE_S){
         blockno = PTE2BLOCKNO(*pte);
         begin_op();
-        pa_dn = kalloc();
-        read_page_from_disk(ROOTDEV, (char *)pa_dn, blockno);
+        pa1 = kalloc();
+        memset(pa1, 0, PGSIZE);
+        read_page_from_disk(ROOTDEV, (char *)pa1, blockno);
         bfree_page(ROOTDEV, blockno);
         end_op();
-        *pte = PA2PTE(pa_dn) | PTE_FLAGS(*pte);
+        *pte = PA2PTE(pa1) | PTE_FLAGS(*pte);
         *pte |= PTE_V;
         *pte &= ~PTE_S;
       }
-      else{
-        pa_wn = kalloc();
-        memset(pa_wn, 0, PGSIZE);
-        if(mappages(p->pagetable, va, PGSIZE, (uint64)pa_wn, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-          kfree(pa_wn);
+      else if(!(*pte & PTE_V)){
+        pa2 = kalloc();
+        memset(pa2, 0, PGSIZE);
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)pa2, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+          kfree((void *)pa2);
         }
       }
     }
