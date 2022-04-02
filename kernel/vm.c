@@ -558,23 +558,28 @@ int madvise(uint64 base, uint64 len, int advice) {
   }
   else if(advice == MADV_WILLNEED){
     pte_t *pte;
-    uint64 *pa;
     uint64 blockno;
+    uint64 *pa_dn;
+    char *pa_wn;
     for(uint64 va=start; va<=end; va+=PGSIZE){
       pte = walk(p->pagetable, va, 0);
       if(*pte & PTE_S){
-        blockno = PTE2PA(*pte);
+        blockno = PTE2BLOCKNO(*pte);
         begin_op();
-        pa = kalloc();
-        read_page_from_disk(ROOTDEV, (char *)pa, blockno);
+        pa_dn = kalloc();
+        read_page_from_disk(ROOTDEV, (char *)pa_dn, blockno);
         bfree_page(ROOTDEV, blockno);
         end_op();
-        // *pte = BLOCKNO2PTE(blockno) | PTE_FLAGS(*pte);
+        *pte = PA2PTE(pa_dn) | PTE_FLAGS(*pte);
         *pte |= PTE_V;
         *pte &= ~PTE_S;
       }
       else{
-        printf("pte: %p\n", *pte);
+        pa_wn = kalloc();
+        memset(pa_wn, 0, PGSIZE);
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)pa_wn, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+          kfree(pa_wn);
+        }
       }
     }
   }
