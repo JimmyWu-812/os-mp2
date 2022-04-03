@@ -13,7 +13,6 @@ int handle_pgfault() {
   uint64 va = r_stval();
   /* TODO */
 
-  // if(va >= p->sz || va < PGROUNDUP(p->trapframe->sp)){
   struct proc *p = myproc();
   if(va >= p->sz){
     return -1;

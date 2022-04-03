@@ -149,23 +149,19 @@ int main(int argc, char *argv[]) {
   vmprint();
   printf("\n");
 
-  /* Write to a legal page */
-  *(page1 + 1) = 'A';
-  printf("# After writing to a page\n");
-  vmprint();
-  printf("\n");
-
-  if (*page1 != '1') {
+  /* Read a legal page */
+  if (*page2 != '2') {
     goto data_error;
   }
-  if (*(page1 + 1) != 'A') {
-    goto data_error;
-  }
-  for (char *ptr = page1 + 2; ptr < page2; ptr += 1) {
+  for (char *ptr = page2 + 1; ptr < page3; ptr += 1) {
     if (*ptr != 0) {
       goto data_error;
     }
   }
+
+  printf("# After reading a page\n");
+  vmprint();
+  printf("\n");
 
   /* Trigger page fault */
   *page3 = '3';
